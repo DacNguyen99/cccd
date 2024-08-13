@@ -18,11 +18,13 @@
 #include <Adafruit_PN532.h>
 
 // If using the breakout with SPI, define the pins for SPI communication.
-#define PN532_SCK (27)
-#define PN532_MOSI (25)
-#define PN532_SS (33)
-#define PN532_MISO (26)
+#define PN532_SCK (30)
+#define PN532_MOSI (37)
+#define PN532_SS (29)
+#define PN532_MISO (31)
 
+#undef PN532_PACKBUFFSIZ
+#define PN532_PACKBUFFSIZ 340
 // If using the breakout or shield with I2C, define just the pins connected
 // to the IRQ and reset lines.  Use the values below (2, 3) for the shield!
 // #define PN532_IRQ (2)
@@ -127,7 +129,7 @@ uint8_t cmd_data_m[50];
 #include "mbedtls/md.h"
 #include "mbedtls/sha1.h"
 
-#define SIZE_READ (231) // 128+32vs2000 ok //128+32+32 vs500 // 231 vs340
+#define SIZE_READ (115) // 128+32vs2000 ok //128+32+32 vs500 // 231 vs340
 
 uint8_t K_enc[16]; /* key enc of card */
 uint8_t K_mac[16]; /* key mac of card */
@@ -144,9 +146,9 @@ uint8_t APDU_data[200];
 uint8_t APDU_len;
 
 /* page 39 LDS1 eMRTD Application ICAO_p10 */
-const uint8_t APDU_LDS1_eMRTD_Application[] = {0x00, 0xA4, 0x04, 0x0C, 0x07, 0xA0, 0x00, 0x00, 0x02, 0x47, 0x10, 0x01};
-const uint8_t APDU_Get_Challenge[] = {0x00, 0x84, 0x00, 0x00, 0x08};
-const uint8_t APPU_Change_Baudrate[] = {03, 03};
+const uint8_t APDU_LDS1_eMRTD_Application[] = {0x00, 0xA4, 0x04, 0x0C, 0x07, 0xA0, 0x00, 0x00, 0x02, 0x47, 0x10, 0x01}; // table 2 page 6 icao p10
+const uint8_t APDU_Get_Challenge[] = {0x00, 0x84, 0x00, 0x00, 0x08};                                                    // https://github.com/italia/cie-PN532/blob/master/cie_PN532.cpp#L505 -> line 505
+const uint8_t APPU_Change_Baudrate[] = {02, 02};
 
 uint8_t response[256];
 uint8_t responseLength = sizeof(response);
@@ -165,8 +167,21 @@ void print_arr(char *ps, uint8_t *arr, int size)
     Serial.println(ps);
     for (int i = 0; i < size; i++)
     {
-        Serial.print(arr[i] < 16 ? "0" : "");
-        Serial.print(arr[i], HEX);
+        // Serial.print(arr[i] < 16 ? "0" : "");
+        // Serial.print(arr[i], HEX);
+        Serial.write(arr[i]);
+
+        // if (arr[i] < 16)
+        // {
+        //     Serial.print("0");
+        //     Serial.print(arr[i], HEX);
+        //     Serial.print(" ");
+        // }
+        // else
+        // {
+        //     Serial.print(arr[i], HEX);
+        //     Serial.print(" ");
+        // }
     }
 }
 
@@ -206,21 +221,22 @@ void adjust_parity_bits(uint8_t *input, uint8_t *output)
 
 void caculator_key_for_MRZ(char *mrz)
 {
+    uint8_t sha1_mrz[20]; // hash code of input
+    uint8_t sha1_out[20]; // hash code of received data
 
-    uint8_t sha1_mrz[20];
-    uint8_t sha1_out[20];
+    mbedtls_sha1_ret((const unsigned char *)mrz, strlen(mrz), sha1_mrz); // calculate hash code from mrz and write to sha1_mrz
+    memset(&sha1_mrz[16], 0, 4);                                         // set last 4 bytes (elements) of shar1_mrz to value 0
 
-    mbedtls_sha1_ret((const unsigned char *)mrz, strlen(mrz), sha1_mrz);
-    memset(&sha1_mrz[16], 0, 4);
     /* Kenc */
-    sha1_mrz[19] = 0x01;
-    mbedtls_sha1_ret((const unsigned char *)sha1_mrz, sizeof(sha1_mrz), sha1_out);
-    adjust_parity_bits(sha1_out, K_enc);
+    sha1_mrz[19] = 0x01;                                                           // last element of sha1_mrz is set to 0x01
+    mbedtls_sha1_ret((const unsigned char *)sha1_mrz, sizeof(sha1_mrz), sha1_out); // calculate hash code from sha1_mrz and write to sha1_out
+    adjust_parity_bits(sha1_out, K_enc);                                           /* K_enc is the encryption key of card
+                                                       calculate odd parity of sha1_out, each bit in K_enc is a parity bit of corresponding element in sha1_out */
 
     /* Kmac */
-    sha1_mrz[19] = 0x02;
+    sha1_mrz[19] = 0x02; // last element of sha1_mrz is set to 0x02
     mbedtls_sha1_ret((const unsigned char *)sha1_mrz, sizeof(sha1_mrz), sha1_out);
-    adjust_parity_bits(sha1_out, K_mac);
+    adjust_parity_bits(sha1_out, K_mac); // K_mac is the secret key for message authentication of card
 }
 
 // void create_key_3des(void)
@@ -384,7 +400,7 @@ int RAPDU_auth_est_session_key(uint8_t *rapdu, uint8_t len)
     /* Caculator R by decrypt */
     uint8_t R[32];
     memset(R, 0x00, sizeof(R));
-    set_key_cipher(K_enc_m, sizeof(K_enc_m));
+    set_key_cipher(K_enc, sizeof(K_enc));
     des.do_3des_decrypt(Eic, sizeof(Eic), R, key_enc, 0);
 
     /* Get SSC */
@@ -490,10 +506,8 @@ void select_EF_COM(uint16_t ef)
     uint8_t pad_data[8];
     memset(pad_data, 0x00, 8);
     pad_data[0] = (ef >> 8) & 0xff;
-    pad_data[1] = ef & 0xff; /* 1D ra gì đó */
+    pad_data[1] = ef & 0xff;
 
-    // pad_data[0] = 01;
-    // pad_data[1] = 01; /* 1D ra gì đó */
     pad_data[2] = 0x80;
 
     uint8_t N[32];
@@ -583,7 +597,7 @@ void select_EF_COM(uint16_t ef)
 //     APDU_len = 19;
 // }
 
-uint16_t get_sizeof_EF(uint8_t *rappu, uint16_t len)
+uint16_t get_sizeof_EF(uint8_t *rappu, uint8_t len) // kho dam 6
 {
     // print_arr("RAPDU", rappu, len);
     /* prepare data enc */
@@ -615,7 +629,7 @@ void prepare_read_data_EF(uint16_t from, uint8_t size)
 {
     // printf("read from %u to %u\r\n", from, size);
     uint8_t N[24];
-    memset(N, 0, 24);
+    memset(N, 0x00, 24);
 
     /* step a) b) c) */
     uint8_t M[11];
@@ -659,17 +673,17 @@ void prepare_read_data_EF(uint16_t from, uint8_t size)
     APDU_len = 19;
 }
 
-void descrypt_data_EF(uint8_t *rappu, uint8_t len)
+void descrypt_data_EF(uint8_t *rappu, uint8_t len, uint8_t size)
 {
     /* prepare data des */
-    uint8_t size_des = rappu[1];
-    if (size_des % 8 != 0)
-        size_des = (size_des / 8 + 1) * 8;
+    uint8_t size_des = size;
+    // if (size_des % 8 != 0)
+    //     size_des = (size_des / 8 + 1) * 8;
     uint8_t data_des[size_des];
     memset(data_des, 0x00, sizeof(data_des));
 
     /* data enscrypt */
-    uint8_t size_enc = rappu[1];
+    uint8_t size_enc = rappu[1] - 1; // kho dam 5
     // if (size_enc % 8 != 0)
     //     size_enc = (size_des / 8 + 1) * 8;
     uint8_t data_enc[size_enc];
@@ -680,8 +694,8 @@ void descrypt_data_EF(uint8_t *rappu, uint8_t len)
     set_key_cipher(KS_enc, 16);
     des.do_3des_decrypt(data_enc, size_enc, data_des, key_enc, 0);
 
-    memcpy(&EF_data[EF_len], data_des, SIZE_READ);
-    EF_len = EF_len + SIZE_READ;
+    memcpy(&EF_data[EF_len], data_des, size); // kho dam 3
+    EF_len = EF_len + size;                   // kho dam 4
     // printf("size_des %u  rappu[1] %u\r\n", size_des, size_enc);
 
     // print_arr("\r\n enc:", data_enc, size_enc);
@@ -727,35 +741,51 @@ void read_remain_data_in_EF(uint16_t size)
     // Serial.print("\r\n size read:");
     // Serial.print(size);
 
-    unsigned long startMicros = millis();
+    // unsigned long startMicros = millis();
 
     //   // Gọi hàm cần đo thời gian ở đây
     //   yourFunctionToMeasure();
 
     EF_len = 0;
-    for (uint32_t index = 0; index < size; index = index + SIZE_READ)
+    printf("size %u\r\n", size);
+
+    int time = (size - 4) / SIZE_READ;
+    int remain = size - time * SIZE_READ - 4;
+    uint16_t index = 4;
+
+    for (int i = 0; i < time; i++)
     {
-        prepare_read_data_EF(index + 4, SIZE_READ);
+        prepare_read_data_EF(index, SIZE_READ);
         nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-        // descrypt_data_EF(response, responseLength);
+        // print_arr("\r\n RESPONSE LOOP :", response, responseLength);
+        descrypt_data_EF(response, responseLength, SIZE_READ); // kho dam 1
+        index = index + SIZE_READ;
     }
 
-    unsigned long endMicros = millis();
-    unsigned long executionTimeMicros = endMicros - startMicros;
+    if (remain != 0)
+    {
+        prepare_read_data_EF(time * SIZE_READ + 4, remain);
+        nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+        // print_arr("\r\n RESPONSE REMAIN :", response, responseLength);
+        descrypt_data_EF(response, responseLength, remain); // kho dam 2
+    }
 
-    Serial.print("\r\nExecution time: ");
-    Serial.print(executionTimeMicros);
-    Serial.println(" microseconds");
+    // unsigned long endMicros = millis();
+    // unsigned long executionTimeMicros = endMicros - startMicros;
 
-    // print_arr("\r\n DATA FINAL :", EF_data, EF_len);
+    // Serial.print("\r\nExecution time: ");
+    // Serial.print(executionTimeMicros);
+    // Serial.println(" microseconds");
+
     // uint16_t index = 4;
-    // for (uint8_t k = 0; k < 10; k++)
+    // for (uint8_t k = 0; k < 5; k++)
     // {
-    //     prepare_read_data_EF(index, 20);
+    //     prepare_read_data_EF(index, SIZE_READ);
     //     nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
     //     descrypt_data_EF(response, responseLength);
-    //     index = index + 20;
+    //     index = index + SIZE_READ;
     // }
+    print_arr("\r\n DATA FINAL :", EF_data, EF_len);
 }
 
 // #include "esp32/rtc_clk.h"
@@ -763,7 +793,7 @@ void setup()
 {
     Serial.begin(921600);
     delay(1000);
-    while (!Serial)
+    while (!Serial) // delay 10ms if the serial port is not yet ready
         delay(10);
 
     // Serial.print(getCpuFrequencyMhz());
@@ -772,7 +802,7 @@ void setup()
     Serial.println("Init PN532");
     nfc.begin();
     uint32_t versiondata = nfc.getFirmwareVersion();
-    if (!versiondata)
+    if (!versiondata) // if version got, show it, if not, infinite loop
     {
         Serial.println("Did not find the shield - locking up");
         while (true)
@@ -789,9 +819,11 @@ void setup()
 
     // compute_mac_over_Eidf_Kmac2();
     // create_key_3des();
-    des.init(key_enc, (unsigned long long int)0);
-    caculator_key_for_MRZ((char *)"098002697398061573806155");
+    des.init(key_enc, (unsigned long long int)0);              // initialization des with key and vector counter
+    caculator_key_for_MRZ((char *)"203000750103090682809067"); // calculate K_enc and K_mac of card with mrz as input - page 87 icao p11
     // nfc.startPassiveTargetIDDetection(02);
+    // 203013531803010172801016
+    // 203000311203112032811202
 }
 
 void loop(void)
@@ -828,6 +860,7 @@ void loop(void)
         Serial.println("Select ePassport application APDU\r\n");
         prepare_eMRTD_Application();
         nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+        // print_arr("check", response, responseLength);
 
         Serial.println("Challenge APDU\r\n");
         prepare_get_challenge();

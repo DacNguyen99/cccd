@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"name": "1stproject",
+			"path": "../../1stproject"
+		},
+		{
+			"name": "nrf_esp32_cccd",
+			"path": ".."
+		}
+	],
+	"settings": {}
+}

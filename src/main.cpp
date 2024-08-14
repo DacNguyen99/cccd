@@ -119,6 +119,23 @@ uint8_t E_ifd_m[32];
 uint8_t M_ifd_m[8];
 uint8_t cmd_data_m[50];
 
+uint8_t information_flag = 0;
+uint8_t length = 0;
+uint8_t identity[12];
+uint8_t name[50];
+uint8_t birth[10];
+uint8_t gender[4];
+uint8_t nationality[50];
+uint8_t ethnicity[30];
+uint8_t religion[30];
+uint8_t origin[100];
+uint8_t residence[150];
+uint8_t identification[100];
+uint8_t regis_date[10];
+uint8_t exp_date[10];
+uint8_t father_name[50];
+uint8_t mother_name[50];
+
 // #include "Hash.h"
 // #include <Crypto.h>
 // #include <sha1.h>
@@ -170,18 +187,6 @@ void print_arr(char *ps, uint8_t *arr, int size)
         // Serial.print(arr[i] < 16 ? "0" : "");
         // Serial.print(arr[i], HEX);
         Serial.write(arr[i]);
-
-        // if (arr[i] < 16)
-        // {
-        //     Serial.print("0");
-        //     Serial.print(arr[i], HEX);
-        //     Serial.print(" ");
-        // }
-        // else
-        // {
-        //     Serial.print(arr[i], HEX);
-        //     Serial.print(" ");
-        // }
     }
 }
 
@@ -786,6 +791,169 @@ void read_remain_data_in_EF(uint16_t size)
     //     index = index + SIZE_READ;
     // }
     print_arr("\r\n DATA FINAL :", EF_data, EF_len);
+
+    // Stuffs with information
+    if (information_flag)
+    {
+        for (uint16_t i = 19; i < EF_len; i++)
+        {
+            if (EF_data[i] == 0x30) // start byte
+            {
+                if (EF_data[i + 2] == 0x02 && EF_data[i + 3] == 0x01) // mandatory bytes
+                {
+                    switch (EF_data[i + 4]) // info type byte
+                    {
+                    case 0x01:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            identity[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n CCCD :", identity, length);
+                        break;
+
+                    case 0x02:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            name[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Name :", name, length);
+                        break;
+
+                    case 0x03:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            birth[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Birth :", birth, length);
+                        break;
+
+                    case 0x04:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            gender[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Gender :", gender, length);
+                        break;
+
+                    case 0x05:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            nationality[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Nationality :", nationality, length);
+                        break;
+
+                    case 0x06:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            ethnicity[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Ethnicity :", ethnicity, length);
+                        break;
+
+                    case 0x07:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            religion[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Religion :", religion, length);
+                        break;
+
+                    case 0x08:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            origin[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Origin :", origin, length);
+                        break;
+
+                    case 0x09:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            residence[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Residence :", residence, length);
+                        break;
+
+                    case 0x0A:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            identification[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Identification :", identification, length);
+                        break;
+
+                    case 0x0B:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            regis_date[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Registration date :", regis_date, length);
+                        break;
+
+                    case 0x0C:
+                        length = EF_data[i + 6]; // length of data
+                        i += 6;
+                        for (int y = 0; y < length; y++)
+                        {
+                            exp_date[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Expired date :", exp_date, length);
+                        break;
+
+                    case 0x0D:
+                        length = EF_data[i + 8]; // length of father's name
+                        i += 8;
+                        for (int y = 0; y < length; y++)
+                        {
+                            father_name[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Father's name :", father_name, length);
+
+                        i += 4;
+                        length = EF_data[i]; // length of mother's name
+                        for (int y = 0; y < length; y++)
+                        {
+                            mother_name[y] = EF_data[++i];
+                        }
+                        print_arr("\r\n Mother's name :", mother_name, length);
+                        i = EF_len;
+                        break;
+
+                    default:
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                printf("WRONG!!!");
+            }
+        }
+        information_flag = 0;
+    }
 }
 
 // #include "esp32/rtc_clk.h"
@@ -820,10 +988,13 @@ void setup()
     // compute_mac_over_Eidf_Kmac2();
     // create_key_3des();
     des.init(key_enc, (unsigned long long int)0);              // initialization des with key and vector counter
-    caculator_key_for_MRZ((char *)"203000750103090682809067"); // calculate K_enc and K_mac of card with mrz as input - page 87 icao p11
+    caculator_key_for_MRZ((char *)"201000937401052932605292"); // calculate K_enc and K_mac of card with mrz as input - page 87 icao p11
     // nfc.startPassiveTargetIDDetection(02);
-    // 203013531803010172801016
-    // 203000311203112032811202
+    // 203013531803010172801016 - duc
+    // 203000311203112032811202 - dat
+    // 203000750103090682809067 - tin
+    // 201000937401052932605292 - huy
+    // 203002516303030332803032 - thinh
 }
 
 void loop(void)
@@ -876,6 +1047,11 @@ void loop(void)
         uint16_t list_rq[] = {0x0101, 0x0102, 0x010D, 0x010E, 0x010F};
         for (uint8_t i = 0; i < 5; i++)
         {
+            if (i == 2)
+            {
+                information_flag = 1;
+            }
+
             Serial.println("\r\n#################################################\r\n");
             Serial.println(list_rq[i], HEX);
 

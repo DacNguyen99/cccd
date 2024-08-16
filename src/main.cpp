@@ -16,6 +16,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <Adafruit_PN532.h>
+#include <ArduinoJson.h>
 
 // If using the breakout with SPI, define the pins for SPI communication.
 #define PN532_SCK (30)
@@ -120,6 +121,9 @@ uint8_t M_ifd_m[8];
 uint8_t cmd_data_m[50];
 
 uint8_t information_flag = 0;
+uint8_t mrz_flag = 0;
+uint8_t success_flag = 0;
+
 uint8_t length = 0;
 uint8_t identity[12];
 uint8_t name[50];
@@ -135,6 +139,19 @@ uint8_t regis_date[10];
 uint8_t exp_date[10];
 uint8_t father_name[50];
 uint8_t mother_name[50];
+
+String data_received = "";
+char mrz_key[25];
+char information[600];
+JsonDocument doc;
+
+enum MODE
+{
+    WAITING,
+    INIT,
+    GETINFO,
+};
+MODE current_mode = WAITING;
 
 // #include "Hash.h"
 // #include <Crypto.h>
@@ -619,7 +636,7 @@ uint16_t get_sizeof_EF(uint8_t *rappu, uint8_t len) // kho dam 6
     /* descrypt data */
     set_key_cipher(KS_enc, 16);
     des.do_3des_decrypt(data_enc, sizeof(data_enc), data_des, key_enc, 0);
-    print_arr("\r\n data 4 bytes:", data_des, size_des);
+    // print_arr("\r\n data 4 bytes:", data_des, size_des);
 
     /* caculator size */
     uint16_t size;
@@ -752,7 +769,7 @@ void read_remain_data_in_EF(uint16_t size)
     //   yourFunctionToMeasure();
 
     EF_len = 0;
-    printf("size %u\r\n", size);
+    // printf("size %u\r\n", size);
 
     int time = (size - 4) / SIZE_READ;
     int remain = size - time * SIZE_READ - 4;
@@ -790,11 +807,12 @@ void read_remain_data_in_EF(uint16_t size)
     //     descrypt_data_EF(response, responseLength);
     //     index = index + SIZE_READ;
     // }
-    print_arr("\r\n DATA FINAL :", EF_data, EF_len);
+    // print_arr("\r\n DATA FINAL :", EF_data, EF_len);
 
     // Stuffs with information
     if (information_flag)
     {
+        // int output_length = 202;
         for (uint16_t i = 19; i < EF_len; i++)
         {
             if (EF_data[i] == 0x30) // start byte
@@ -810,7 +828,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             identity[y] = EF_data[++i];
                         }
-                        print_arr("\r\n CCCD :", identity, length);
+                        doc["Số CCCD"] = std::string(identity, identity + length);
+                        // print_arr("\r\n CCCD :", identity, length);
                         break;
 
                     case 0x02:
@@ -820,7 +839,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             name[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Name :", name, length);
+                        doc["Họ và tên"] = std::string(name, name + length);
+                        // print_arr("\r\n Name :", name, length);
                         break;
 
                     case 0x03:
@@ -830,7 +850,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             birth[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Birth :", birth, length);
+                        doc["Ngày sinh"] = std::string(birth, birth + length);
+                        // print_arr("\r\n Birth :", birth, length);
                         break;
 
                     case 0x04:
@@ -840,7 +861,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             gender[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Gender :", gender, length);
+                        doc["Giới tính"] = std::string(gender, gender + length);
+                        // print_arr("\r\n Gender :", gender, length);
                         break;
 
                     case 0x05:
@@ -850,7 +872,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             nationality[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Nationality :", nationality, length);
+                        doc["Quốc tịch"] = std::string(nationality, nationality + length);
+                        // print_arr("\r\n Nationality :", nationality, length);
                         break;
 
                     case 0x06:
@@ -860,7 +883,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             ethnicity[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Ethnicity :", ethnicity, length);
+                        doc["Dân tộc"] = std::string(ethnicity, ethnicity + length);
+                        // print_arr("\r\n Ethnicity :", ethnicity, length);
                         break;
 
                     case 0x07:
@@ -870,7 +894,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             religion[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Religion :", religion, length);
+                        doc["Tôn giáo"] = std::string(religion, religion + length);
+                        // print_arr("\r\n Religion :", religion, length);
                         break;
 
                     case 0x08:
@@ -880,7 +905,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             origin[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Origin :", origin, length);
+                        doc["Quê quán"] = std::string(origin, origin + length);
+                        // print_arr("\r\n Origin :", origin, length);
                         break;
 
                     case 0x09:
@@ -890,7 +916,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             residence[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Residence :", residence, length);
+                        doc["Thường trú"] = std::string(residence, residence + length);
+                        // print_arr("\r\n Residence :", residence, length);
                         break;
 
                     case 0x0A:
@@ -900,7 +927,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             identification[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Identification :", identification, length);
+                        doc["Nhận dạng"] = std::string(identification, identification + length);
+                        // print_arr("\r\n Identification :", identification, length);
                         break;
 
                     case 0x0B:
@@ -910,7 +938,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             regis_date[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Registration date :", regis_date, length);
+                        doc["Ngày cấp"] = std::string(regis_date, regis_date + length);
+                        // print_arr("\r\n Registration date :", regis_date, length);
                         break;
 
                     case 0x0C:
@@ -920,7 +949,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             exp_date[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Expired date :", exp_date, length);
+                        doc["Ngày hết hạn"] = std::string(exp_date, exp_date + length);
+                        // print_arr("\r\n Expired date :", exp_date, length);
                         break;
 
                     case 0x0D:
@@ -930,7 +960,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             father_name[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Father's name :", father_name, length);
+                        doc["Họ tên cha"] = std::string(father_name, father_name + length);
+                        // print_arr("\r\n Father's name :", father_name, length);
 
                         i += 4;
                         length = EF_data[i]; // length of mother's name
@@ -938,7 +969,8 @@ void read_remain_data_in_EF(uint16_t size)
                         {
                             mother_name[y] = EF_data[++i];
                         }
-                        print_arr("\r\n Mother's name :", mother_name, length);
+                        doc["Họ tên mẹ"] = std::string(mother_name, mother_name + length);
+                        // print_arr("\r\n Mother's name :", mother_name, length);
                         i = EF_len;
                         break;
 
@@ -949,7 +981,7 @@ void read_remain_data_in_EF(uint16_t size)
             }
             else
             {
-                printf("WRONG!!!");
+                printf("WRONG");
             }
         }
         information_flag = 0;
@@ -967,28 +999,9 @@ void setup()
     // Serial.print(getCpuFrequencyMhz());
     // setCpuFrequencyMhz(80);
 
-    Serial.println("Init PN532");
-    nfc.begin();
-    uint32_t versiondata = nfc.getFirmwareVersion();
-    if (!versiondata) // if version got, show it, if not, infinite loop
-    {
-        Serial.println("Did not find the shield - locking up");
-        while (true)
-        {
-        }
-    }
-    Serial.print("Found chip PN5");
-    Serial.println((versiondata >> 24) & 0xFF, HEX);
-    Serial.print("Firmware ver. ");
-    Serial.print((versiondata >> 16) & 0xFF, DEC);
-    Serial.print('.');
-    Serial.println((versiondata >> 8) & 0xFF, DEC);
-    delay(1000);
-
     // compute_mac_over_Eidf_Kmac2();
     // create_key_3des();
-    des.init(key_enc, (unsigned long long int)0);              // initialization des with key and vector counter
-    caculator_key_for_MRZ((char *)"201000937401052932605292"); // calculate K_enc and K_mac of card with mrz as input - page 87 icao p11
+
     // nfc.startPassiveTargetIDDetection(02);
     // 203013531803010172801016 - duc
     // 203000311203112032811202 - dat
@@ -1014,63 +1027,147 @@ void loop(void)
 
     // byte[] h2 = des1.CreateEncryptor().TransformFinalBlock(int2, 0, 8);
 
-    if (nfc.inListPassiveTarget())
+    switch (current_mode)
     {
-        // nfc.startPassiveTargetIDDetection(00);
-        // for (uint8_t i = 0; i < 32; i++)
-        // {
-        //     S_m[i] = random();
-        // }
-
-        Serial.println("Change Baudrate\r\n");
-        // prepare_eMRTD_Application();
-        memcpy(APDU_data, APPU_Change_Baudrate, 2);
-        nfc.change_baudrate(APDU_data, sizeof(APPU_Change_Baudrate), response, &responseLength);
-        // print_arr("check", response, responseLength);
-
-        Serial.println("Select ePassport application APDU\r\n");
-        prepare_eMRTD_Application();
-        nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-        // print_arr("check", response, responseLength);
-
-        Serial.println("Challenge APDU\r\n");
-        prepare_get_challenge();
-        nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-
-        /* get 8 byte RND.IFD */
-        Serial.println("Authenticate APDU\r\n");
-        prepare_external_authenticate(response, responseLength);
-        nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-
-        RAPDU_auth_est_session_key(response, responseLength); /* colect ssc */
-
-        uint16_t list_rq[] = {0x0101, 0x0102, 0x010D, 0x010E, 0x010F};
-        for (uint8_t i = 0; i < 5; i++)
+    case WAITING:
+    {
+        while (Serial.available() == 0)
         {
-            if (i == 2)
+        }
+
+        if (Serial.available() > 0)
+        {
+            uint8_t startByte = 0;
+            startByte = Serial.read();
+            if (startByte == '!')
             {
-                information_flag = 1;
+                mrz_flag = 1;
+                data_received = Serial.readStringUntil('\r');
+                // Serial.println("DATA: ");
+                // Serial.println(data_received);
+                current_mode = INIT;
             }
-
-            Serial.println("\r\n#################################################\r\n");
-            Serial.println(list_rq[i], HEX);
-
-            // /* select EF.COM */
-            Serial.println("select EF.COM\r\n");
-            select_EF_COM(list_rq[i]); /* inc ssc */
-            nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-
-            /* Read Binary of first four bytes */
-            Serial.println("Read first 4 bytes in EF\r\n");
-            prepare_read_data_EF(0, 4); /* receive -> inc ssc, prepare -> inc ssc */
-            nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
-
-            /* Read Binary of remain */
-            Serial.println("Check and read remain in EF\r\n");
-            uint16_t size_EF = get_sizeof_EF(response, responseLength);
-            read_remain_data_in_EF(size_EF);
-            ssc.counter++;
         }
     }
-    delay(1000);
+    break;
+
+    case INIT:
+    {
+        // Serial.println("Init PN532");
+        nfc.begin();
+        uint32_t versiondata = nfc.getFirmwareVersion();
+        if (!versiondata) // if version got, show it, if not, infinite loop
+        {
+            // Serial.println("Did not find the shield - locking up");
+            Serial.println("#FAIL");
+            mrz_flag = 0;
+            current_mode = WAITING;
+            // while (true)
+            // {
+            // }
+        }
+        // Serial.print("Found chip PN5");
+        // Serial.println((versiondata >> 24) & 0xFF, HEX);
+        // Serial.print("Firmware ver. ");
+        // Serial.print((versiondata >> 16) & 0xFF, DEC);
+        // Serial.print('.');
+        // Serial.println((versiondata >> 8) & 0xFF, DEC);
+        delay(1000);
+
+        des.init(key_enc, (unsigned long long int)0); // initialization des with key and vector counter
+        data_received.toCharArray(mrz_key, data_received.length() + 1);
+        caculator_key_for_MRZ(mrz_key); // calculate K_enc and K_mac of card with mrz as input - page 87 icao p11
+        current_mode = GETINFO;
+    }
+    break;
+
+    case GETINFO:
+    {
+        if (nfc.inListPassiveTarget())
+        {
+            // nfc.startPassiveTargetIDDetection(00);
+            // for (uint8_t i = 0; i < 32; i++)
+            // {
+            //     S_m[i] = random();
+            // }
+
+            // Serial.println("Change Baudrate\r\n");
+            // prepare_eMRTD_Application();
+            memcpy(APDU_data, APPU_Change_Baudrate, 2);
+            nfc.change_baudrate(APDU_data, sizeof(APPU_Change_Baudrate), response, &responseLength);
+            // print_arr("check", response, responseLength);
+
+            // Serial.println("Select ePassport application APDU\r\n");
+            prepare_eMRTD_Application();
+            nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+            // print_arr("check", response, responseLength);
+
+            // Serial.println("Challenge APDU\r\n");
+            prepare_get_challenge();
+            nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+
+            /* get 8 byte RND.IFD */
+            // Serial.println("Authenticate APDU\r\n");
+            prepare_external_authenticate(response, responseLength);
+            nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+
+            RAPDU_auth_est_session_key(response, responseLength); /* colect ssc */
+
+            uint16_t list_rq[] = {0x0101, 0x0102, 0x010D, 0x010E, 0x010F};
+            for (uint8_t i = 0; i < 5; i++)
+            {
+                if (i == 2)
+                {
+                    information_flag = 1;
+                }
+
+                // Serial.println("\r\n#################################################\r\n");
+                // Serial.println(list_rq[i], HEX);
+
+                // /* select EF.COM */
+                // Serial.println("select EF.COM\r\n");
+                select_EF_COM(list_rq[i]); /* inc ssc */
+                nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+
+                /* Read Binary of first four bytes */
+                // Serial.println("Read first 4 bytes in EF\r\n");
+                prepare_read_data_EF(0, 4); /* receive -> inc ssc, prepare -> inc ssc */
+                nfc.inDataExchange(APDU_data, APDU_len, response, &responseLength);
+
+                /* Read Binary of remain */
+                // Serial.println("Check and read remain in EF\r\n");
+                uint16_t size_EF = get_sizeof_EF(response, responseLength);
+                if (size_EF <= 0)
+                {
+                    mrz_flag = 0;
+                    success_flag = 0;
+                    Serial.println("#FAIL");
+                    current_mode = WAITING;
+                    break;
+                }
+                else
+                {
+                    success_flag = 1;
+                }
+                read_remain_data_in_EF(size_EF);
+                ssc.counter++;
+
+                mrz_flag = 0;
+                current_mode = WAITING;
+            }
+            if (success_flag)
+            {
+                Serial.println("#OKE");
+                serializeJson(doc, information);
+                Serial.println(information);
+                // serializeJson(doc, Serial);
+                success_flag = 0;
+            }
+        }
+    }
+    break;
+
+    default:
+        break;
+    }
 }
